@@ -1,0 +1,100 @@
+#### Step 1: Data Collection and Preprocessing
+You can use the GTZAN dataset for this project, which is available on Kaggle. This dataset includes audio files of different genres.
+
+python
+import librosa
+import numpy as np
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, Conv2D, MaxPooling2D, Flatten
+
+# Load and preprocess the dataset
+def extract_features(file_name):
+    try:
+        audio, sample_rate = librosa.load(file_name, res_type='kaiser_fast')
+        mfccs = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=40)
+        mfccs_scaled = np.mean(mfccs.T,axis=0)
+    except Exception as e:
+        print(f"Error encountered while parsing file: {file_name}")
+        return None 
+    return mfccs_scaled
+
+# Path to the dataset
+dataset_path = 'path_to_your_dataset/genres/'
+genres = 'blues classical country disco hiphop jazz metal pop reggae rock'.split()
+
+features = []
+labels = []
+
+for genre in genres:
+    genre_path = os.path.join(dataset_path, genre)
+    for file_name in os.listdir(genre_path):
+        file_path = os.path.join(genre_path, file_name)
+        features.append(extract_features(file_path))
+        labels.append(genre)
+
+# Convert to dataframe
+features_df = pd.DataFrame(features)
+labels_df = pd.DataFrame(labels, columns=['genre'])
+data = pd.concat([features_df, labels_df], axis=1)
+
+# Encode labels
+encoder = LabelEncoder()
+y = encoder.fit_transform(data['genre'])
+X = data.drop(['genre'], axis=1)
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Reshape for CNN
+X_train = np.array(X_train).reshape(-1, 40, 1, 1)
+X_test = np.array(X_test).reshape(-1, 40, 1, 1)
+
+# Convert to categorical
+y_train = tf.keras.utils.to_categorical(y_train, num_classes=10)
+y_test = tf.keras.utils.to_categorical(y_test, num_classes=10)
+
+# Build the CNN model
+model = Sequential()
+model.add(Conv2D(32, (3, 3), activation='relu', input_shape=(40, 1, 1)))
+model.add(MaxPooling2D((2, 2)))
+model.add(Dropout(0.3))
+model.add(Flatten())
+model.add(Dense(128, activation='relu'))
+model.add(Dropout(0.5))
+model.add(Dense(10, activation='softmax'))
+
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Train the model
+history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_data=(X_test, y_test))
+
+# Evaluate the model
+test_loss, test_acc = model.evaluate(X_test, y_test)
+print('Test accuracy:', test_acc)
+
+
+#### Step 2: Model Evaluation and Visualization
+python
+# Plot training history
+plt.figure(figsize=(12, 4))
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Val Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'], label='Val Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.show()
